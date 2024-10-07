@@ -13,7 +13,7 @@ import (
 )
 
 func run(cfg *Config) error {
-	ciaCol := cia.NewCollection(cfg.Collection).WithMaxPages(cfg.MaxPages)
+	ciaCol := cia.NewCollection(cfg.Collection).WithMaxPages(cfg.MaxPages).WithStartPage(cfg.StartPage)
 
 	go func() {
 		if err := ciaCol.GetPages(); err != nil {

@@ -83,7 +83,7 @@ func (c *Config) AddDocumentItem(doc *Item) error {
 }
 
 var (
-	docQueue       = make(chan *Document, 50)
+	docQueue       = make(chan *Document, 1000)
 	docQueueTicker = time.NewTicker(10 * time.Second)
 	docQueueChan   = make(chan bool)
 )

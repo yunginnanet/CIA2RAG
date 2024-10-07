@@ -17,11 +17,12 @@ const (
 )
 
 type Config struct {
-	Endpoint  string
-	APIKey    string
-	Workspace string
-	seen      Seen
-	mu        sync.RWMutex
+	Endpoint   string
+	APIKey     string
+	Workspace  string
+	seen       Seen
+	forceEmbed bool
+	mu         sync.RWMutex
 }
 
 func NewConfig() *Config {
@@ -34,6 +35,11 @@ func NewConfig() *Config {
 
 func (c *Config) WithWorkspace(workspace string) *Config {
 	c.Workspace = workspace
+	return c
+}
+
+func (c *Config) WithForceEmbed(force bool) *Config {
+	c.forceEmbed = force
 	return c
 }
 
@@ -71,10 +77,12 @@ func (c *Config) updateSeen() error {
 					continue
 				}
 				c.markSeenURL(item.ChunkSource)
-				if err := c.AddDocumentItem(&item); err != nil {
-					log.Printf("[err] failed to add document: %v", err)
+				if c.forceEmbed {
+					log.Printf("[info] force re-embedding document: %s", item.ChunkSource)
+					if err := c.AddDocumentItem(&item); err != nil {
+						log.Printf("[err] failed to add document: %v", err)
+					}
 				}
-				log.Printf("observed document: %s", item.Name)
 			}
 		}
 	}

@@ -21,6 +21,8 @@ var (
 type Config struct {
 	Collection  string
 	MaxPages    int
+	StartPage   int
+	ForceEmbed  bool
 	AnythingLLM *anythingllm.Config
 }
 
@@ -32,8 +34,21 @@ func NewConfig(collection string) *Config {
 	}
 }
 
+func (c *Config) WithForceEmbed(forceEmbed bool) *Config {
+	c.ForceEmbed = forceEmbed
+	return c
+}
+
 func (c *Config) WithMaxPages(maxPages int) *Config {
 	c.MaxPages = maxPages
+	return c
+}
+
+func (c *Config) WithStartPage(startPage int) *Config {
+	if startPage < 1 {
+		startPage = 1
+	}
+	c.StartPage = startPage
 	return c
 }
 
@@ -44,21 +59,23 @@ func (c *Config) WithAnythingLLM(config *anythingllm.Config) *Config {
 
 func ConfigFromFlags() *Config {
 	maxPages := flag.Int("pages", defaultMaxPages, "Maximum number of pages to scrape")
+	startPage := flag.Int("start-page", 1, "Page to start scraping from")
 	collection := flag.String("collection", "", "Collection to scrape")
 	aEndpoint := flag.String("anythingllm-endpoint", anythingllm.DefaultEndpoint, "AnythingLLM endpoint")
 	aKey := flag.String("anythingllm-key", "", "AnythingLLM key")
 	aWorkspace := flag.String("anythingllm-workspace", "cia-reading-room", "AnythingLLM workspace")
+	aForceEmbed := flag.Bool("anythingllm-force-embed", false, "Force embeds in AnythingLLM")
 
 	flag.Parse()
 
 	anythingLLM := anythingllm.NewConfig().
-		WithEndpoint(*aEndpoint).WithAPIKey(*aKey).WithWorkspace(*aWorkspace)
+		WithEndpoint(*aEndpoint).WithAPIKey(*aKey).WithWorkspace(*aWorkspace).WithForceEmbed(*aForceEmbed)
 
 	if *collection == "" {
 		log.Fatal("Collection is required")
 	}
 
-	return NewConfig(*collection).WithAnythingLLM(anythingLLM).WithMaxPages(*maxPages)
+	return NewConfig(*collection).WithAnythingLLM(anythingLLM).WithMaxPages(*maxPages).WithStartPage(*startPage)
 }
 
 func (c *Config) Validate() error {

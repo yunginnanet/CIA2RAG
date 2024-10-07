@@ -58,15 +58,12 @@ type Collection struct {
 	Pages        map[int]chan string
 	done         *atomic.Bool
 	maxDocuments int
+	startPage    int
 	mu           sync.RWMutex
 }
 
-func NewCollection(name string, maxPagesOpt ...int) *Collection {
+func NewCollection(name string) *Collection {
 	maxPages := maxPagesDefault
-
-	if len(maxPagesOpt) > 0 {
-		maxPages = maxPagesOpt[0]
-	}
 
 	done := &atomic.Bool{}
 	done.Store(false)
@@ -84,6 +81,15 @@ func (c *Collection) WithMaxPages(maxPages int) *Collection {
 	return c
 }
 
+func (c *Collection) WithStartPage(startPage int) *Collection {
+	if startPage < 1 {
+		startPage = 1
+	}
+	startPage -= 1
+	c.startPage = startPage
+	return c
+}
+
 func (c *Collection) GetPages() error {
 	wg := &sync.WaitGroup{}
 
@@ -91,7 +97,7 @@ func (c *Collection) GetPages() error {
 		c.maxDocuments = 20
 	}
 
-	for i := 1; ; i++ {
+	for i := c.startPage; ; i++ {
 		if i > c.maxDocuments/20 {
 			break
 		}
@@ -159,7 +165,7 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 			close(documents)
 			log.Println("drained all documents")
 		}()
-		for i := 1; ; i++ {
+		for i := c.startPage; ; i++ {
 		try:
 
 			if c.done.Load() {
