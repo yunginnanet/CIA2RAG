@@ -60,6 +60,10 @@ func run(cfg *Config) error {
 			continue
 		}
 		spew.Dump(doc)
+		if err := cfg.AnythingLLM.AddDocument(doc); err != nil {
+			log.Printf("[err] failed to add document '%s': %v", doc.ID, err)
+			return err
+		}
 		count++
 	}
 

@@ -47,11 +47,12 @@ func ConfigFromFlags() *Config {
 	collection := flag.String("collection", "", "Collection to scrape")
 	aEndpoint := flag.String("anythingllm-endpoint", anythingllm.DefaultEndpoint, "AnythingLLM endpoint")
 	aKey := flag.String("anythingllm-key", "", "AnythingLLM key")
+	aWorkspace := flag.String("anythingllm-workspace", "cia-reading-room", "AnythingLLM workspace")
 
 	flag.Parse()
 
 	anythingLLM := anythingllm.NewConfig().
-		WithEndpoint(*aEndpoint).WithAPIKey(*aKey)
+		WithEndpoint(*aEndpoint).WithAPIKey(*aKey).WithWorkspace(*aWorkspace)
 
 	if *collection == "" {
 		log.Fatal("Collection is required")
