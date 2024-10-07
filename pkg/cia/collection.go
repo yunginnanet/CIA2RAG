@@ -94,7 +94,7 @@ func (c *Collection) GetPages() error {
 			c.mu.Lock()
 			c.Pages[i] = make(chan string, 25)
 			c.mu.Unlock()
-			println("getting page", i)
+
 			go c.GetPage(i)
 
 		case http.StatusNotFound:

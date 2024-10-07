@@ -1,4 +1,4 @@
-package cia_scrape
+package main
 
 import (
 	"errors"
@@ -63,5 +63,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("%w: missing collection name", ErrInvalidConfig)
 	}
 	ciaCol := cia.NewCollection(c.Collection)
-	return ciaCol.Validate()
+	if err := ciaCol.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidConfig, err)
+	}
+	if c.MaxPages <= 0 {
+		return fmt.Errorf("%w: max pages must be positive", ErrInvalidConfig)
+	}
+	if err := c.AnythingLLM.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidConfig, err)
+	}
+	return nil
 }

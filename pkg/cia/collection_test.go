@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -42,18 +43,15 @@ func TestEndpointURL_ReturnsCorrectURL(t *testing.T) {
 }
 
 func TestPageURL_ReturnsCorrectURL(t *testing.T) {
-	expected := EndpointCollection() + "testCollection?page=1"
-	result := PageURL("testCollection", 1)
-	if result != expected {
-		t.Errorf("expected %s, got %s", expected, result)
-	}
-}
-
-func TestPageURL_ReturnsCorrectURLForMultiplePages(t *testing.T) {
-	expected := EndpointCollection() + "testCollection?page=5"
-	result := PageURL("testCollection", 5)
-	if result != expected {
-		t.Errorf("expected %s, got %s", expected, result)
+	for i := 1; i <= 10; i++ {
+		expected := EndpointCollection() + "testCollection"
+		if i > 1 {
+			expected += "?page=" + strconv.Itoa(i)
+		}
+		result := PageURL("testCollection", i)
+		if result != expected {
+			t.Errorf("expected %s, got %s", expected, result)
+		}
 	}
 }
 
@@ -69,6 +67,14 @@ func TestNewCollection_SetsNameAndPages(t *testing.T) {
 
 func TestGetPages_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/readingroom/collection/test" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.URL.Query().Get("page") != "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -87,6 +93,7 @@ func TestGetPages_Success(t *testing.T) {
 func TestGetPages_NoPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
+		return
 	}))
 	defer server.Close()
 
@@ -100,7 +107,6 @@ func TestGetPages_NoPages(t *testing.T) {
 
 func TestParsePage_Success(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
-		t.Parallel()
 		body := bytes.NewBufferString(`<div class="field-content"><a href="/readingroom/document/test">Document</a></div>`)
 		res := &http.Response{
 			StatusCode: http.StatusOK,
@@ -115,17 +121,17 @@ func TestParsePage_Success(t *testing.T) {
 			t.Errorf("expected no error, got %v", err)
 		}
 		if len(links) == 0 || links[0] != prefix+"test" {
-			t.Errorf("expected links to contain 'test', got %v", links)
+			t.Errorf("expected links to contain '%s', got %v", prefix, links)
 		}
 	})
 
 	t.Run("test_data", func(t *testing.T) {
-		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := w.Write([]byte(testData))
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				t.Fatalf("failed to write test data: %v", err)
+				return
 			}
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -175,6 +181,7 @@ func TestParsePage_NoDocuments(t *testing.T) {
 func TestValidate_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
+		return
 	}))
 	defer server.Close()
 
@@ -189,6 +196,7 @@ func TestValidate_Success(t *testing.T) {
 func TestValidate_CollectionNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
+		return
 	}))
 	defer server.Close()
 
