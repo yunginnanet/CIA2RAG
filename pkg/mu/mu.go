@@ -3,12 +3,15 @@ package mu
 import (
 	"log"
 	"sync"
+	"time"
 )
 
 var (
 	Mutexes  = make(map[string]*SharedMutex)
 	globalMu sync.RWMutex
 )
+
+const defaultDelay = time.Duration(1) * time.Second
 
 func GetMutex(name string) *SharedMutex {
 	globalMu.RLock()
@@ -21,15 +24,23 @@ func GetMutex(name string) *SharedMutex {
 }
 
 type SharedMutex struct {
-	name string
-	mu   *sync.RWMutex
+	name  string
+	delay time.Duration
+	mu    *sync.RWMutex
 }
 
 func NewSharedMutex(name string) *SharedMutex {
 	globalMu.Lock()
-	sm := &SharedMutex{name: name, mu: &sync.RWMutex{}}
+	sm := &SharedMutex{name: name, mu: &sync.RWMutex{}, delay: defaultDelay}
 	Mutexes[name] = sm
 	globalMu.Unlock()
+	return sm
+}
+
+func (sm *SharedMutex) WithDelayedUnlock(delay time.Duration) *SharedMutex {
+	sm.mu.Lock()
+	sm.delay = delay
+	sm.mu.Unlock()
 	return sm
 }
 
@@ -39,6 +50,9 @@ func (sm *SharedMutex) Lock() {
 }
 
 func (sm *SharedMutex) Unlock() {
+	if sm.delay > 0 {
+		time.Sleep(sm.delay)
+	}
 	sm.mu.Unlock()
 	log.Printf("[mutex] '%s' unlocked", sm.name)
 }

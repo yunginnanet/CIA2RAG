@@ -140,7 +140,7 @@ func (c *Collection) GetPages() error {
 			if sleepFactor > 300 {
 				sleepFactor /= 2
 			}
-			time.Sleep(time.Millisecond * time.Duration(sleepFactor*35))
+			time.Sleep(time.Millisecond * time.Duration(sleepFactor*5))
 			continue
 
 		case http.StatusNotFound:
@@ -167,11 +167,19 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 	var (
 		seenMap = make(map[string]bool)
 		seenMu  sync.RWMutex
+		chanMu  sync.RWMutex
 	)
 
 	go func() {
 		defer func() {
-			time.Sleep(time.Second * 5)
+			for {
+				if chanMu.TryLock() {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+				print(".")
+				continue
+			}
 			close(documents)
 			log.Println("drained all documents")
 		}()
@@ -216,12 +224,11 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 					seenMap[page] = true
 					seenMu.Unlock()
 
-					select {
-					case <-ctx.Done():
+					if !chanMu.TryRLock() {
 						return
-					case documents <- page:
-					default:
 					}
+					documents <- page
+					chanMu.RUnlock()
 				}
 			}()
 		}
@@ -279,7 +286,7 @@ func (c *Collection) GetPage(i int, channel chan string, wg *sync.WaitGroup) err
 		sleepFactor /= 2
 	}
 
-	time.Sleep(time.Millisecond * (time.Duration(i * 200)))
+	time.Sleep(time.Millisecond * (time.Duration(i * 50)))
 
 	log.Printf("getting page %d", i)
 
