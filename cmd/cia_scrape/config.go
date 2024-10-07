@@ -48,6 +48,8 @@ func ConfigFromFlags() *Config {
 	aEndpoint := flag.String("anythingllm-endpoint", anythingllm.DefaultEndpoint, "AnythingLLM endpoint")
 	aKey := flag.String("anythingllm-key", "", "AnythingLLM key")
 
+	flag.Parse()
+
 	anythingLLM := anythingllm.NewConfig().
 		WithEndpoint(*aEndpoint).WithAPIKey(*aKey)
 

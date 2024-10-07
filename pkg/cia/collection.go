@@ -2,11 +2,15 @@ package cia
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 var (
@@ -52,6 +56,7 @@ func putBuffer(buf *bytes.Buffer) {
 type Collection struct {
 	Name         string
 	Pages        map[int]chan string
+	done         *atomic.Bool
 	maxDocuments int
 	mu           sync.RWMutex
 }
@@ -63,49 +68,118 @@ func NewCollection(name string, maxPagesOpt ...int) *Collection {
 		maxPages = maxPagesOpt[0]
 	}
 
+	done := &atomic.Bool{}
+	done.Store(false)
+
 	return &Collection{
 		Name:         name,
 		Pages:        make(map[int]chan string),
+		done:         done,
 		maxDocuments: maxPages * 20,
 	}
 }
 
+func (c *Collection) WithMaxPages(maxPages int) *Collection {
+	c.maxDocuments = maxPages * 20
+	return c
+}
+
 func (c *Collection) GetPages() error {
-	for i := 0; ; i++ {
+	wg := &sync.WaitGroup{}
+
+	if c.maxDocuments < 20 {
+		c.maxDocuments = 20
+	}
+
+	for i := 1; ; i++ {
+		if i > c.maxDocuments/20 {
+			break
+		}
+
 		res, err := http.Head(PageURL(c.Name, i))
 		if err != nil {
+			c.done.Store(true)
 			return err
 		}
 		switch res.StatusCode {
 		case http.StatusOK:
+			log.Printf("found page %d", i)
 
-			c.mu.RLock()
-			if len(c.Pages) >= c.maxDocuments {
-				c.mu.RUnlock()
-				return nil
-			}
-
-			if _, ok := c.Pages[i]; ok {
-				c.mu.RUnlock()
-				continue
-			}
-			c.mu.RUnlock()
+			var channel chan string
+			var pageCt int
 
 			c.mu.Lock()
 			c.Pages[i] = make(chan string, 25)
+			channel = c.Pages[i]
+			pageCt = len(c.Pages)
 			c.mu.Unlock()
 
-			go c.GetPage(i)
+			if pageCt*20 >= c.maxDocuments {
+				return nil
+			}
+
+			go func() {
+				wg.Add(1)
+				if err := c.GetPage(i, channel, wg); err != nil {
+					log.Printf("error getting page %d: %v", i, err)
+				}
+			}()
+
+			time.Sleep(time.Millisecond * time.Duration(i*35))
+			continue
 
 		case http.StatusNotFound:
 			if i == 0 {
 				return ErrNoPages
 			}
+			wg.Wait()
+			c.done.Store(true)
 			return nil
 		default:
+			c.done.Store(true)
 			return fmt.Errorf("%w: %d", ErrBadStatusCode, res.StatusCode)
 		}
 	}
+
+	wg.Wait()
+	c.done.Store(true)
+	return nil
+}
+
+func (c *Collection) Drain(ctx context.Context) chan string {
+	var documents = make(chan string, c.maxDocuments)
+
+	go func() {
+		defer func() {
+			close(documents)
+			log.Println("drained all documents")
+		}()
+		for i := 1; ; i++ {
+		try:
+
+			if c.done.Load() {
+				return
+			}
+
+			c.mu.RLock()
+			channel, ok := c.Pages[i]
+			c.mu.RUnlock()
+			if !ok {
+				if c.done.Load() {
+					return
+				}
+				time.Sleep(time.Millisecond * 500)
+				goto try
+			}
+			go func() {
+				for page := range channel {
+					documents <- page
+				}
+			}()
+		}
+	}()
+
+	return documents
 }
 
 func ParsePage(res *http.Response) ([]string, error) {
@@ -149,23 +223,38 @@ func ParsePage(res *http.Response) ([]string, error) {
 	return matchStrings, nil
 }
 
-func (c *Collection) GetPage(i int) {
+func (c *Collection) GetPage(i int, channel chan string, wg *sync.WaitGroup) error {
+	defer wg.Done()
+
+	time.Sleep(time.Millisecond * (time.Duration(i * 200)))
+
+	log.Printf("getting page %d", i)
+
 	res, err := http.Get(PageURL(c.Name, i))
 	if err != nil {
-		return
+		return err
 	}
+
+	log.Printf("parsing page %d", i)
 
 	links, err := ParsePage(res)
 	if err != nil {
 		_ = res.Body.Close()
-		return
+		return err
 	}
 
 	for _, link := range links {
-		c.mu.RLock()
-		c.Pages[i] <- link
-		c.mu.RUnlock()
+		log.Printf("page %d found document: %s", i, link)
+		channel <- link
 	}
+
+	close(channel)
+
+	log.Printf("page %d has %d documents", i, len(links))
+
+	_ = res.Body.Close()
+
+	return nil
 }
 
 func (c *Collection) Validate() error {

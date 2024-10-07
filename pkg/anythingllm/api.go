@@ -1,6 +1,7 @@
 package anythingllm
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,9 @@ func (c *Config) WithEndpoint(endpoint string) *Config {
 }
 
 func (c *Config) WithAPIKey(key string) *Config {
+	if strings.TrimSpace(key) == "" {
+		return c
+	}
 	c.APIKey = key
 	return c
 }
@@ -90,13 +94,21 @@ func (c *Config) get(endpoint string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
+	}
 	return http.DefaultClient.Do(req)
 }
 
 func (c *Config) post(endpoint string, body io.Reader) (*http.Response, error) {
-	req, _ := http.NewRequest(http.MethodPost, c.Endpoint+endpoint, body)
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
+	req, err := http.NewRequest(http.MethodPost, c.Endpoint+endpoint, body)
+	if err != nil {
+		return nil, err
+	}
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
+	}
+	req.Header.Set("Content-Type", "application/json")
 	return http.DefaultClient.Do(req)
 }
 
@@ -107,4 +119,58 @@ func (c *Config) Validate() error {
 	}
 	ar := NewAuthResponse(res)
 	return ar.Err()
+}
+
+type UploadLink struct {
+	Link string `json:"link"`
+}
+
+type Document struct {
+	ID                 string `json:"id"`
+	Url                string `json:"url"`
+	Title              string `json:"title"`
+	DocAuthor          string `json:"docAuthor"`
+	Description        string `json:"description"`
+	DocSource          string `json:"docSource"`
+	ChunkSource        string `json:"chunkSource"`
+	Published          string `json:"published"`
+	WordCount          int    `json:"wordCount"`
+	PageContent        string `json:"pageContent"`
+	TokenCountEstimate int    `json:"token_count_estimate"`
+	Location           string `json:"location"`
+}
+
+type UploadLinkResponse struct {
+	Success   bool        `json:"success"`
+	Error     interface{} `json:"error"`
+	Documents []Document  `json:"documents"`
+}
+
+func (c *Config) UploadLink(s string) (*Document, error) {
+	l := &UploadLink{Link: s}
+	dat, _ := json.Marshal(l)
+	strings.NewReader(s)
+	res, err := c.post("v1/document/upload-link", bytes.NewReader(dat))
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		_ = res.Body.Close()
+		return nil, fmt.Errorf("failed to upload link: %s", http.StatusText(res.StatusCode))
+	}
+	up := &UploadLinkResponse{}
+	data, err := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if err = json.Unmarshal(data, up); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	if len(up.Documents) == 0 {
+		return nil, errors.New("no documents uploaded")
+	}
+
+	return &up.Documents[0], nil
+
 }
