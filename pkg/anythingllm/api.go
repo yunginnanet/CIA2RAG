@@ -100,6 +100,18 @@ func (c *Config) get(endpoint string) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
+func (c *Config) delete(endpoint string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodDelete, c.Endpoint+endpoint, body)
+	if err != nil {
+		return nil, err
+	}
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return http.DefaultClient.Do(req)
+}
+
 func (c *Config) post(endpoint string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodPost, c.Endpoint+endpoint, body)
 	if err != nil {
@@ -146,6 +158,26 @@ type UploadLinkResponse struct {
 	Documents []Document  `json:"documents"`
 }
 
+var ErrAccessDenied = errors.New("access denied")
+
+type RemoveDocument struct {
+	Names []string `json:"names"`
+}
+
+func (c *Config) DeleteDocument(location string) error {
+	rd := &RemoveDocument{Names: []string{location}}
+	dat, _ := json.Marshal(rd)
+	res, err := c.delete("v1/system/remove-documents", bytes.NewReader(dat))
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != http.StatusOK {
+		_ = res.Body.Close()
+		return fmt.Errorf("failed to remove document: %s", http.StatusText(res.StatusCode))
+	}
+	return nil
+}
+
 func (c *Config) UploadLink(s string) (*Document, error) {
 	l := &UploadLink{Link: s}
 	dat, _ := json.Marshal(l)
@@ -169,6 +201,10 @@ func (c *Config) UploadLink(s string) (*Document, error) {
 	}
 	if len(up.Documents) == 0 {
 		return nil, errors.New("no documents uploaded")
+	}
+
+	if strings.HasPrefix(up.Documents[0].PageContent, "Access Denied") {
+		return &up.Documents[0], ErrAccessDenied
 	}
 
 	return &up.Documents[0], nil

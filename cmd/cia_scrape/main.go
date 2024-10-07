@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"time"
 
 	"github.com/l0nax/go-spew/spew"
 
+	"ciascrape/pkg/anythingllm"
 	"ciascrape/pkg/cia"
 )
 
@@ -21,11 +24,27 @@ func run(cfg *Config) error {
 	pages := ciaCol.Drain(context.Background())
 
 	count := 0
+	retries := 0
 
 	for page := range pages {
 		log.Printf("uploading page: %s", page)
 		doc, err := cfg.AnythingLLM.UploadLink(page)
 		if err != nil {
+			if errors.Is(err, anythingllm.ErrAccessDenied) {
+				retries++
+				log.Printf("[err] access denied, retrying and sleeping for %d seconds...", retries)
+				if err := cfg.AnythingLLM.DeleteDocument(doc.Location); err != nil {
+					log.Printf("[err] failed to delete document '%s': %v", doc.Location, err)
+					return err
+				}
+				log.Printf("deleted document '%s'", doc.Location)
+				go func() {
+					time.Sleep(time.Second)
+					pages <- page
+				}()
+				time.Sleep(time.Second * time.Duration(retries))
+				continue
+			}
 			log.Printf("[err] failed to upload link: %v", err)
 			continue
 		}
