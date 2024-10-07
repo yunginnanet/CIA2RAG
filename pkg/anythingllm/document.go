@@ -91,6 +91,11 @@ func (c *Config) UploadLink(s string) (*Document, error) {
 	}
 
 	if strings.HasPrefix(up.Documents[0].PageContent, "Access Denied") {
+		if strings.TrimSpace(c.mullvadFIFO) != "" {
+			if err = WriteToFIFO(c.mullvadFIFO); err != nil {
+				log.Printf("[err][mullvad-fifo] failed to signal FIFO at '%s'", c.mullvadFIFO)
+			}
+		}
 		return &up.Documents[0], ErrAccessDenied
 	}
 

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"ciascrape/pkg/mu"
 )
 
 const (
@@ -17,12 +19,13 @@ const (
 )
 
 type Config struct {
-	Endpoint   string
-	APIKey     string
-	Workspace  string
-	seen       Seen
-	forceEmbed bool
-	mu         sync.RWMutex
+	Endpoint    string
+	APIKey      string
+	Workspace   string
+	mullvadFIFO string
+	seen        Seen
+	forceEmbed  bool
+	mu          sync.RWMutex
 }
 
 func NewConfig() *Config {
@@ -30,6 +33,12 @@ func NewConfig() *Config {
 		Endpoint: DefaultEndpoint,
 		seen:     make(Seen),
 	}
+	return c
+}
+
+func (c *Config) WithMullvadFIFO(fifo string) *Config {
+	fifo = strings.TrimSpace(fifo)
+	c.mullvadFIFO = fifo
 	return c
 }
 
@@ -160,7 +169,10 @@ func (c *Config) get(endpoint string) (*http.Response, error) {
 	if c.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
 	}
-	return http.DefaultClient.Do(req)
+	mu.GetMutex("net").RLock()
+	res, err := http.DefaultClient.Do(req)
+	mu.GetMutex("net").RUnlock()
+	return res, err
 }
 
 func (c *Config) delete(endpoint string, body io.Reader) (*http.Response, error) {
@@ -172,7 +184,10 @@ func (c *Config) delete(endpoint string, body io.Reader) (*http.Response, error)
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
 	}
 	req.Header.Set("Content-Type", "application/json")
-	return http.DefaultClient.Do(req)
+	mu.GetMutex("net").RLock()
+	res, err := http.DefaultClient.Do(req)
+	mu.GetMutex("net").RUnlock()
+	return res, err
 }
 
 func (c *Config) post(endpoint string, body io.Reader) (*http.Response, error) {
@@ -185,7 +200,10 @@ func (c *Config) post(endpoint string, body io.Reader) (*http.Response, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	return http.DefaultClient.Do(req)
+	mu.GetMutex("net").RLock()
+	res, err := http.DefaultClient.Do(req)
+	mu.GetMutex("net").RUnlock()
+	return res, err
 }
 
 func (c *Config) Validate() error {

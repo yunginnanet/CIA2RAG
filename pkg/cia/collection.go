@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"ciascrape/pkg/mu"
 )
 
 var (
@@ -102,7 +104,10 @@ func (c *Collection) GetPages() error {
 			break
 		}
 
+		mu.GetMutex("net").RLock()
 		res, err := http.Head(PageURL(c.Name, i))
+		mu.GetMutex("net").RUnlock()
+
 		if err != nil {
 			c.done.Store(true)
 			return err
@@ -131,7 +136,11 @@ func (c *Collection) GetPages() error {
 				}
 			}()
 
-			time.Sleep(time.Millisecond * time.Duration(i*35))
+			sleepFactor := i - c.startPage
+			if sleepFactor > 300 {
+				sleepFactor /= 2
+			}
+			time.Sleep(time.Millisecond * time.Duration(sleepFactor*35))
 			continue
 
 		case http.StatusNotFound:
@@ -162,6 +171,7 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 
 	go func() {
 		defer func() {
+			time.Sleep(time.Second * 5)
 			close(documents)
 			log.Println("drained all documents")
 		}()
@@ -172,9 +182,17 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 				return
 			}
 
+			select {
+			case <-ctx.Done():
+				return
+			default:
+
+			}
+
 			c.mu.RLock()
 			channel, ok := c.Pages[i]
 			c.mu.RUnlock()
+
 			if !ok {
 				if c.done.Load() {
 					return
@@ -182,6 +200,7 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 				time.Sleep(time.Millisecond * 500)
 				goto try
 			}
+
 			go func() {
 				for page := range channel {
 
@@ -197,8 +216,12 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 					seenMap[page] = true
 					seenMu.Unlock()
 
-					documents <- page
-
+					select {
+					case <-ctx.Done():
+						return
+					case documents <- page:
+					default:
+					}
 				}
 			}()
 		}
@@ -251,11 +274,19 @@ func ParsePage(res *http.Response) ([]string, error) {
 func (c *Collection) GetPage(i int, channel chan string, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
+	sleepFactor := i - c.startPage
+	if sleepFactor > 300 {
+		sleepFactor /= 2
+	}
+
 	time.Sleep(time.Millisecond * (time.Duration(i * 200)))
 
 	log.Printf("getting page %d", i)
 
+	mu.GetMutex("net").RLock()
 	res, err := http.Get(PageURL(c.Name, i))
+	mu.GetMutex("net").RUnlock()
+
 	if err != nil {
 		return err
 	}
@@ -286,7 +317,10 @@ func (c *Collection) Validate() error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	mu.GetMutex("net").RLock()
 	res, err := http.Head(EndpointURL(c.Name))
+	mu.GetMutex("net").RUnlock()
+
 	if err != nil {
 		return err
 	}

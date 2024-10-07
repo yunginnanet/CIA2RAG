@@ -65,17 +65,23 @@ func ConfigFromFlags() *Config {
 	aKey := flag.String("anythingllm-key", "", "AnythingLLM key")
 	aWorkspace := flag.String("anythingllm-workspace", "cia-reading-room", "AnythingLLM workspace")
 	aForceEmbed := flag.Bool("anythingllm-force-embed", false, "Force embeds in AnythingLLM")
+	mullvadFIFOTrigger := flag.String(
+		"mullvad-fifo", "", "path to a FIFO where this app will write when the CIA throttles the scraper",
+	)
 
 	flag.Parse()
 
 	anythingLLM := anythingllm.NewConfig().
-		WithEndpoint(*aEndpoint).WithAPIKey(*aKey).WithWorkspace(*aWorkspace).WithForceEmbed(*aForceEmbed)
+		WithEndpoint(*aEndpoint).WithAPIKey(*aKey).
+		WithWorkspace(*aWorkspace).WithForceEmbed(*aForceEmbed).
+		WithMullvadFIFO(*mullvadFIFOTrigger)
 
 	if *collection == "" {
 		log.Fatal("Collection is required")
 	}
 
-	return NewConfig(*collection).WithAnythingLLM(anythingLLM).WithMaxPages(*maxPages).WithStartPage(*startPage)
+	return NewConfig(*collection).
+		WithAnythingLLM(anythingLLM).WithMaxPages(*maxPages).WithStartPage(*startPage)
 }
 
 func (c *Config) Validate() error {
