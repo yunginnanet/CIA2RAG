@@ -149,6 +149,11 @@ func (c *Collection) GetPages() error {
 func (c *Collection) Drain(ctx context.Context) chan string {
 	var documents = make(chan string, c.maxDocuments)
 
+	var (
+		seenMap = make(map[string]bool)
+		seenMu  sync.RWMutex
+	)
+
 	go func() {
 		defer func() {
 			close(documents)
@@ -173,7 +178,21 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 			}
 			go func() {
 				for page := range channel {
+
+					seenMu.RLock()
+					_, seenOK := seenMap[page]
+					if seenOK {
+						seenMu.RUnlock()
+						continue
+					}
+					seenMu.RUnlock()
+
+					seenMu.Lock()
+					seenMap[page] = true
+					seenMu.Unlock()
+
 					documents <- page
+
 				}
 			}()
 		}

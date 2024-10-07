@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 const (
@@ -18,12 +20,53 @@ const (
 type Config struct {
 	Endpoint string
 	APIKey   string
+	seen     Seen
+	mu       sync.RWMutex
 }
 
 func NewConfig() *Config {
 	return &Config{
 		Endpoint: DefaultEndpoint,
+		seen:     make(Seen),
 	}
+}
+
+func (c *Config) hasSeenURL(s string) bool {
+	if strings.HasPrefix(s, "link://") {
+		s = s[7:]
+	}
+	c.mu.RLock()
+	_, ok := c.seen["link://"+s]
+	if !ok {
+		_, ok = c.seen[s]
+	}
+	c.mu.RUnlock()
+	return ok
+}
+
+func (c *Config) markSeenURL(s string) {
+	if strings.HasPrefix(s, "link://") {
+		s = s[7:]
+	}
+	c.mu.Lock()
+	c.seen["link://"+s] = true
+	c.mu.Unlock()
+}
+
+func (c *Config) updateSeen() error {
+	docsFolder, err := c.GetDocuments()
+	if err != nil {
+		return err
+	}
+	for _, items := range docsFolder {
+		for _, item := range items {
+			if item.Type == "file" {
+				c.markSeenURL(item.ChunkSource)
+				log.Printf("observed document: %s", item.ChunkSource)
+			}
+		}
+	}
+	return nil
 }
 
 func (c *Config) WithEndpoint(endpoint string) *Config {
@@ -130,7 +173,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 	ar := NewAuthResponse(res)
-	return ar.Err()
+	if err := ar.Err(); err != nil {
+		return err
+	}
+	return c.updateSeen()
 }
 
 type UploadLink struct {
@@ -178,7 +224,16 @@ func (c *Config) DeleteDocument(location string) error {
 	return nil
 }
 
+var ErrDuplicate = errors.New("already seen link")
+
 func (c *Config) UploadLink(s string) (*Document, error) {
+
+	if c.hasSeenURL(s) {
+		return nil, ErrDuplicate
+	}
+
+	c.markSeenURL(s)
+
 	l := &UploadLink{Link: s}
 	dat, _ := json.Marshal(l)
 	strings.NewReader(s)
@@ -208,5 +263,84 @@ func (c *Config) UploadLink(s string) (*Document, error) {
 	}
 
 	return &up.Documents[0], nil
+}
 
+// link://https://[...]
+
+type Item struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	ChunkSource string `json:"chunkSource"`
+	WordCount   int    `json:"wordCount"`
+	Cached      bool   `json:"cached"`
+	Items       []Item `json:"items"`
+}
+
+type DocumentsResponse struct {
+	LocalFiles struct {
+		Name  string `json:"name"`
+		Type  string `json:"type"`
+		Items []Item `json:"items"`
+	} `json:"localFiles"`
+}
+
+type DocumentsFolder map[string][]Item
+type Seen map[string]bool
+
+func DocsToFolders(resp *DocumentsResponse) DocumentsFolder {
+	folders := make(DocumentsFolder)
+	count := 0
+	for _, item := range resp.LocalFiles.Items {
+		folders[item.Name] = item.Items
+		count++
+		for _, subItem := range item.Items {
+			if subItem.Type == "folder" {
+				folders[item.Name] = append(folders[item.Name], subItem.Items...)
+				count += len(subItem.Items)
+			} else {
+				folders[item.Name] = append(folders[item.Name], subItem)
+				count++
+			}
+			for _, subSubItem := range subItem.Items {
+				if subSubItem.Type == "folder" {
+					folders[item.Name] = append(folders[item.Name], subSubItem.Items...)
+					count += len(subSubItem.Items)
+				} else {
+					folders[item.Name] = append(folders[item.Name], subSubItem)
+					count++
+				}
+			}
+		}
+	}
+
+	log.Printf("total existing documents observed for dedupe purposes: %d", count)
+
+	return folders
+}
+
+func (c *Config) GetDocuments() (DocumentsFolder, error) {
+	log.Println("getting documents")
+	res, err := c.get("v1/documents")
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		_ = res.Body.Close()
+		return nil, fmt.Errorf("failed to get documents: %s", http.StatusText(res.StatusCode))
+	}
+	docs := &DocumentsResponse{}
+	data, err := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if err = json.Unmarshal(data, docs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	docFolders := DocsToFolders(docs)
+
+	return docFolders, nil
 }

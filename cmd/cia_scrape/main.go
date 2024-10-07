@@ -29,10 +29,14 @@ func run(cfg *Config) error {
 	for page := range pages {
 		log.Printf("uploading page: %s", page)
 		doc, err := cfg.AnythingLLM.UploadLink(page)
+		if errors.Is(err, anythingllm.ErrDuplicate) {
+			log.Printf("duplicate link: %s", page)
+			continue
+		}
 		if err != nil {
 			if errors.Is(err, anythingllm.ErrAccessDenied) {
 				retries++
-				log.Printf("[err] access denied, retrying and sleeping for %d seconds...", retries)
+				log.Printf("[err] access denied (%d), retrying and sleeping...", retries)
 				if err := cfg.AnythingLLM.DeleteDocument(doc.Location); err != nil {
 					log.Printf("[err] failed to delete document '%s': %v", doc.Location, err)
 					return err
@@ -42,7 +46,14 @@ func run(cfg *Config) error {
 					time.Sleep(time.Second)
 					pages <- page
 				}()
-				time.Sleep(time.Second * time.Duration(retries))
+				switch {
+				case retries > 10 && retries <= 100:
+					time.Sleep(time.Millisecond * time.Duration(retries*100))
+				case retries > 100:
+					time.Sleep(time.Second * time.Duration(retries))
+				default:
+					time.Sleep(time.Second * time.Duration(retries))
+				}
 				continue
 			}
 			log.Printf("[err] failed to upload link: %v", err)
