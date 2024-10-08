@@ -23,7 +23,7 @@ echo -e "\n${_hr}"
 
 if ! ls mullvad_relays >/dev/null; then
 	echo "creating mullvad_relays fifo"
-	mkfifo mullvad_relays || exit 1
+	/ mkfifo mullvad_relays || exit 1
 fi
 
 if ! ls mullvad_trigger >/dev/null; then
@@ -31,8 +31,10 @@ if ! ls mullvad_trigger >/dev/null; then
 	mkfifo mullvad_trigger || exit 1
 fi
 
-./mullvad_relays.sh &
+./mullvad_get_relays.sh &
 ./mullvad_switch.sh &
-if ! (pgrep mullvad_relays && pgrep mullvad_switch) && echo -e "\nscripts started."; then
+if ! pgrep -f mullvad_get_relays.sh && pgrep -f mullvad_switch.sh; then
 	_kill && echo "failed" && exit 1
+else
+	echo -e "\nscripts started."
 fi

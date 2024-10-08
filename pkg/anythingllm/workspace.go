@@ -152,7 +152,7 @@ func (c *Config) AddDocument(doc *Document) error {
 	case docQueue <- doc:
 	default:
 		docQueueChan <- true
-		time.Sleep(1 * time.Second)
+		time.Sleep(250 * time.Millisecond)
 		docQueue <- doc
 	}
 	return nil

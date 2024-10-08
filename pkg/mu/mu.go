@@ -112,7 +112,7 @@ func (sm *SharedMutex) Unlock(ctx ...context.Context) {
 	}
 
 	if sm.sigListening.Load() && len(ctx) == 0 {
-		ctx1, cancel := context.WithTimeout(context.Background(), time.Duration(10)*time.Second)
+		ctx1, cancel := context.WithTimeout(context.Background(), time.Duration(20)*time.Second)
 		defer cancel()
 		ctx = append(ctx, ctx1)
 	}

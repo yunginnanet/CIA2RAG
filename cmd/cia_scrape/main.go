@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/l0nax/go-spew/spew"
@@ -14,6 +16,19 @@ import (
 )
 
 func run(cfg *Config) error {
+	defer func() {
+		if r := recover(); r != nil {
+			hr := strings.Repeat("-", 10)
+			log.Printf("recovered from panic: \n%s\n%v\n%s\n", r, hr, hr)
+			print("\nexiting...")
+			for i := 0; i < 10; i++ {
+				print(".")
+				time.Sleep(1 * time.Second)
+			}
+			os.Exit(1)
+		}
+	}()
+
 	ciaCol := cia.NewCollection(cfg.Collection).WithMaxPages(cfg.MaxPages).WithStartPage(cfg.StartPage)
 
 	go func() {
@@ -24,7 +39,7 @@ func run(cfg *Config) error {
 
 	_ = mu.NewSharedMutex("net").WithSIGHUPUnlock()
 
-	pages := ciaCol.Drain(context.Background())
+	pages, doneCh := ciaCol.Drain(context.Background())
 
 	count := 0
 	retries := 0
@@ -46,16 +61,21 @@ func run(cfg *Config) error {
 				}
 				log.Printf("deleted document '%s'", doc.Location)
 				go func() {
-					time.Sleep(time.Second)
+					time.Sleep(time.Second / 2)
+					select {
+					case <-doneCh:
+						return
+					default:
+					}
 					pages <- page
 				}()
 				switch {
 				case retries > 10 && retries <= 100:
-					time.Sleep(time.Millisecond * time.Duration(retries*100))
+					time.Sleep(time.Millisecond * time.Duration(retries*25))
 				case retries > 100:
-					time.Sleep(time.Second * time.Duration(retries))
+					time.Sleep(time.Duration(time.Second*time.Duration(retries)) / 4)
 				default:
-					time.Sleep(time.Second * time.Duration(retries))
+					time.Sleep(time.Duration(time.Second*time.Duration(retries)) / 4)
 				}
 				continue
 			}

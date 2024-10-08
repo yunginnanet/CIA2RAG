@@ -161,13 +161,14 @@ func (c *Collection) GetPages() error {
 	return nil
 }
 
-func (c *Collection) Drain(ctx context.Context) chan string {
+func (c *Collection) Drain(ctx context.Context) (chan string, chan bool) {
 	var documents = make(chan string, c.maxDocuments)
 
 	var (
 		seenMap = make(map[string]bool)
 		seenMu  sync.RWMutex
 		chanMu  sync.RWMutex
+		doneCh  = make(chan bool)
 	)
 
 	go func() {
@@ -180,7 +181,9 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 				print(".")
 				continue
 			}
+			doneCh <- true
 			close(documents)
+			close(doneCh)
 			log.Println("drained all documents")
 		}()
 		for i := c.startPage; ; i++ {
@@ -234,7 +237,7 @@ func (c *Collection) Drain(ctx context.Context) chan string {
 		}
 	}()
 
-	return documents
+	return documents, doneCh
 }
 
 func ParsePage(res *http.Response) ([]string, error) {
