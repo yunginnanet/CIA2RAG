@@ -9,6 +9,10 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	spew2 "github.com/davecgh/go-spew/spew"
+
+	"ciascrape/pkg/bufs"
 )
 
 type UploadLink struct {
@@ -57,6 +61,112 @@ func (c *Config) DeleteDocument(location string) error {
 }
 
 var ErrDuplicate = errors.New("already seen link")
+
+type RawText struct {
+	TextContent string   `json:"textContent"`
+	Metadata    TextMeta `json:"metadata"`
+}
+
+type TextMeta struct {
+	Title       string `json:"title"`
+	Url         string `json:"url"`
+	DocAuthor   string `json:"docAuthor"`
+	Description string `json:"description"`
+	DocSource   string `json:"docSource"`
+	ChunkSource string `json:"chunkSource"`
+	Published   string `json:"published"`
+	Etc         string `json:"etc"`
+}
+
+type RawTextResp struct {
+	Success   bool        `json:"success"`
+	Error     interface{} `json:"error"`
+	Documents []Document  `json:"documents"`
+}
+
+func NewRawText(url, name, text string) *RawText {
+	return &RawText{
+		TextContent: text,
+		Metadata: TextMeta{
+			Title: name,
+			Url:   url,
+		},
+	}
+}
+
+func processRawTextResp(dat []byte) []byte {
+	d1 := make([]byte, len(dat))
+	copy(d1, dat)
+
+	proc := func(d *RawTextResp, data []byte) []byte {
+		defer func() {
+			if r := recover(); r != nil {
+				data = d1
+			}
+		}()
+		if err := json.Unmarshal(data, d); err == nil {
+			if len(d.Documents) == 0 {
+				return data
+			}
+			return []byte(spew2.Sdump(d))
+		}
+		return data
+	}
+
+	d := &RawTextResp{}
+
+	return proc(d, dat)
+}
+
+func (c *Config) UploadRaw(url, s string) ([]byte, error) {
+	// v1/document/raw-text
+	if c.hasSeenURL(url) {
+		return nil, ErrDuplicate
+	}
+	rt := NewRawText(url, url, s)
+	dat, err := json.Marshal(rt)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.post("v1/document/raw-text", bytes.NewReader(dat))
+	if err != nil {
+		log.Printf("failed to upload raw text: %s", err)
+		return nil, err
+	}
+
+	var data []byte
+
+	defer func() {
+		_ = res.Body.Close()
+	}()
+
+	if res == nil {
+		return nil, fmt.Errorf("failed to upload raw text, nil response: %s", err)
+	}
+
+	log.Printf("uploaded raw text (status: %d): %s", url, res.StatusCode)
+
+	if res.StatusCode == http.StatusOK && res.Body != nil {
+		buf := bufs.GetBuffer()
+		defer bufs.PutBuffer(buf)
+		var n int64
+		n, err = buf.ReadFrom(res.Body)
+		if err != nil {
+			log.Printf("failed to read response: %s", err)
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
+		data = make([]byte, n)
+		copy(data, buf.Bytes())
+
+	} else {
+		if res != nil {
+			return nil, fmt.Errorf("failed to upload raw text: %s", http.StatusText(res.StatusCode))
+		}
+		return nil, fmt.Errorf("failed to upload raw text, nil response: %s", err)
+	}
+
+	return processRawTextResp(data), err
+}
 
 func (c *Config) UploadLink(s string) (*Document, error) {
 

@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"sync"
 
+	"ciascrape/pkg/bufs"
 	"ciascrape/pkg/mu"
 )
 
@@ -215,6 +217,57 @@ func (c *Config) post(endpoint string, body io.Reader) (*http.Response, error) {
 	mu.GetMutex("net").RLock()
 	res, err := http.DefaultClient.Do(req)
 	mu.GetMutex("net").RUnlock()
+	return res, err
+}
+
+func (c *Config) Upload(name string, file io.Reader) (*http.Response, error) {
+	return c.upload("v1/document/upload", name, file)
+}
+
+func (c *Config) upload(endpoint string, name string, file io.Reader) (*http.Response, error) {
+
+	buf := bufs.GetBuffer()
+	defer bufs.PutBuffer(buf)
+
+	w := multipart.NewWriter(buf)
+
+	fw, err := w.CreateFormFile("file", name)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err = io.Copy(fw, file); err != nil {
+		return nil, err
+	}
+
+	if err = w.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.Endpoint+endpoint, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
+	}
+
+	req.Header.Set("Content-Type", "multipart/form-data")
+	req.Header.Set("Accept", "application/json")
+
+	mu.GetMutex("net").RLock()
+	res, err := http.DefaultClient.Do(req)
+	mu.GetMutex("net").RUnlock()
+
+	if err != nil {
+		err = fmt.Errorf("failed to upload document: %w", err)
+	}
+
+	if err == nil && res.StatusCode != http.StatusOK {
+		err = fmt.Errorf("failed to upload document: %s", res.Status)
+	}
+
 	return res, err
 }
 
