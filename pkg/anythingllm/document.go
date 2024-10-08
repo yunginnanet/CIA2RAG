@@ -47,16 +47,16 @@ type RemoveDocument struct {
 }
 
 func (c *Config) DeleteDocument(location string) error {
-	rd := &RemoveDocument{Names: []string{location}}
-	dat, _ := json.Marshal(rd)
-	res, err := c.delete("v1/system/remove-documents", bytes.NewReader(dat))
-	if err != nil {
-		return err
-	}
-	if res.StatusCode != http.StatusOK {
-		_ = res.Body.Close()
-		return fmt.Errorf("failed to remove document: %s", http.StatusText(res.StatusCode))
-	}
+	/*	rd := &RemoveDocument{Names: []string{location}}
+		dat, _ := json.Marshal(rd)
+		res, err := c.delete("v1/system/remove-documents", bytes.NewReader(dat))
+		if err != nil {
+			return err
+		}
+		if res.StatusCode != http.StatusOK {
+			_ = res.Body.Close()
+			return fmt.Errorf("failed to remove document: %s", http.StatusText(res.StatusCode))
+		}*/
 	return nil
 }
 
@@ -155,6 +155,7 @@ func (c *Config) UploadRaw(url, s string) ([]byte, error) {
 			log.Printf("failed to read response: %s", err)
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
+		_ = res.Body.Close()
 		data = make([]byte, n)
 		copy(data, buf.Bytes())
 
@@ -200,7 +201,8 @@ func (c *Config) UploadLink(s string) (*Document, error) {
 		return nil, errors.New("no documents uploaded")
 	}
 
-	if strings.HasPrefix(up.Documents[0].PageContent, "Access Denied") {
+	if strings.HasPrefix(up.Documents[0].PageContent, "Access Denied") ||
+		strings.Contains(up.Documents[0].PageContent, "the link you are trying to access is undergoing scheduled maintenance") {
 		if strings.TrimSpace(c.mullvadFIFO) != "" {
 			if err = WriteToFIFO(c.mullvadFIFO); err != nil {
 				log.Printf("[err][mullvad-fifo] failed to signal FIFO at '%s'", c.mullvadFIFO)

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	spew2 "github.com/davecgh/go-spew/spew"
 	"github.com/l0nax/go-spew/spew"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
@@ -23,7 +24,7 @@ import (
 
 var (
 	pdfRegex      = regexp.MustCompile(pdfRegexPattern)
-	pdfGoRoutines = semaphore.NewWeighted(15)
+	pdfGoRoutines = semaphore.NewWeighted(500)
 
 	ErrNoDocuments = errors.New("no documents found")
 )
@@ -212,7 +213,7 @@ func seekPDF(url string) (string, []byte, error) {
 
 	processRes := func(res *http.Response) ([]byte, error) {
 		if res == nil || res.StatusCode != http.StatusOK || res.Body == nil {
-			return nil, fmt.Errorf("invalid PDF response:\n%s", spew.Sdump(res))
+			return nil, fmt.Errorf("invalid PDF response:\n%s", spew2.Sdump(res))
 		}
 		var n int64
 		var err error

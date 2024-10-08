@@ -11,7 +11,7 @@ import (
 )
 
 type Buffer struct {
-	b *bytes.Buffer
+	b bytes.Buffer
 	p int
 	n int
 }
@@ -29,9 +29,6 @@ func (x *Buffer) Write(p []byte) (int, error) {
 }
 
 func (x *Buffer) grow(n int) {
-	if x.b == nil {
-		x.b = &bytes.Buffer{}
-	}
 	if n >= x.b.Cap() {
 		b := x.Bytes()
 		x.b.Grow(n)

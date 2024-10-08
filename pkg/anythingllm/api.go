@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	http2 "ciascrape/pkg/http"
+
 	"ciascrape/pkg/bufs"
 	"ciascrape/pkg/mu"
 )
@@ -184,7 +186,7 @@ func (c *Config) get(endpoint string) (*http.Response, error) {
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
 	}
 	mu.GetMutex("net").RLock()
-	res, err := http.DefaultClient.Do(req)
+	res, err := http2.DefaultClient.Do(req)
 	mu.GetMutex("net").RUnlock()
 	return res, err
 }
@@ -199,7 +201,7 @@ func (c *Config) delete(endpoint string, body io.Reader) (*http.Response, error)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	mu.GetMutex("net").RLock()
-	res, err := http.DefaultClient.Do(req)
+	res, err := http2.DefaultClient.Do(req)
 	mu.GetMutex("net").RUnlock()
 	return res, err
 }
@@ -215,7 +217,7 @@ func (c *Config) post(endpoint string, body io.Reader) (*http.Response, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	mu.GetMutex("net").RLock()
-	res, err := http.DefaultClient.Do(req)
+	res, err := http2.DefaultClient.Do(req)
 	mu.GetMutex("net").RUnlock()
 	return res, err
 }
@@ -257,7 +259,7 @@ func (c *Config) upload(endpoint string, name string, file io.Reader) (*http.Res
 	req.Header.Set("Accept", "application/json")
 
 	mu.GetMutex("net").RLock()
-	res, err := http.DefaultClient.Do(req)
+	res, err := http2.DefaultClient.Do(req)
 	mu.GetMutex("net").RUnlock()
 
 	if err != nil {

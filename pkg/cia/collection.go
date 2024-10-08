@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/semaphore"
+
 	"ciascrape/pkg/bufs"
 	"ciascrape/pkg/mu"
 )
@@ -78,6 +80,8 @@ func (c *Collection) WithStartPage(startPage int) *Collection {
 	return c
 }
 
+var pagesGoRoutines = semaphore.NewWeighted(500)
+
 func (c *Collection) GetPages() error {
 	wg := &sync.WaitGroup{}
 
@@ -116,6 +120,8 @@ func (c *Collection) GetPages() error {
 			}
 
 			go func() {
+				_ = pagesGoRoutines.Acquire(context.Background(), 1)
+				defer pagesGoRoutines.Release(1)
 				wg.Add(1)
 				if err := c.GetPage(i, channel, wg); err != nil {
 					log.Printf("error getting page %d: %v", i, err)
