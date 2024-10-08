@@ -19,13 +19,14 @@ const (
 )
 
 type Config struct {
-	Endpoint    string
-	APIKey      string
-	Workspace   string
-	mullvadFIFO string
-	seen        Seen
-	forceEmbed  bool
-	mu          sync.RWMutex
+	Endpoint     string
+	APIKey       string
+	Workspace    string
+	mullvadFIFO  string
+	seen         Seen
+	forceEmbed   bool
+	forceProcess bool
+	mu           sync.RWMutex
 }
 
 func NewConfig() *Config {
@@ -33,6 +34,11 @@ func NewConfig() *Config {
 		Endpoint: DefaultEndpoint,
 		seen:     make(Seen),
 	}
+	return c
+}
+
+func (c *Config) WithForceProcess(force bool) *Config {
+	c.forceProcess = force
 	return c
 }
 
@@ -48,11 +54,14 @@ func (c *Config) WithWorkspace(workspace string) *Config {
 }
 
 func (c *Config) WithForceEmbed(force bool) *Config {
-	c.forceEmbed = force
+	c.forceProcess = force
 	return c
 }
 
 func (c *Config) hasSeenURL(s string) bool {
+	if c.forceProcess {
+		return false
+	}
 	if strings.HasPrefix(s, "link://") {
 		s = s[7:]
 	}
@@ -66,6 +75,9 @@ func (c *Config) hasSeenURL(s string) bool {
 }
 
 func (c *Config) markSeenURL(s string) {
+	if c.forceProcess {
+		return
+	}
 	if strings.HasPrefix(s, "link://") {
 		s = s[7:]
 	}

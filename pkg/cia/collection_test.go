@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"ciascrape/pkg/bufs"
 )
 
 const testDataPacked = `H4sIAAAAAAACA+2YUW+iQBDH3/0UG156fVgWFirYQxJbbc70Shvlcs8Iq5BDILDqeZ/+dqGYrZ5Ve+kl9TCKu7AzOzP85xcFACuIljZ4flkZ8GOvKLpSkPruOiOSbRWZlwBkWyhjyyxULW+B0rBevYzIqoDTiMQBEMaQRjRmPjbuQ722qK77aUJJQtkuHghzMu1KKCdeECWzPE3niAWxmLPryI88mAdZpw0VxTDNXFFUrCi6qiiKBrFkf3J7N6B3Cdze+B7cPY5uBxbyWMihfnrM1bHeGiaL+YTkVQ5VLSr7i8om9iYkBsK4ztz7mSbpfM0dQcoqeWH3n10Cp3R5zQLj/nY8b9fmdtiDo/5TnfzoZfIbJ29KM/NmhO204PvsxPF6hqLpExsXLxMSQtjKB9eRviniaRQTqAqa2r+RRb1JTOqLBY38H2tIEn4ykOwWsGjIxMaW5ewT2j1KPT/kd8hCbMpPjaNfpJywWPkqVFm0LDpJg3XpIq/9p0HAtwzsrXvJG8CK5jPxDIxYkBLwYtqVnvp3oJqW3dKVvCyLI9+jUZqgLJhKoMj9rcaYp8EiJgXivhA3LpBgBZmVnCUzibUt2HRWSGlWXCO0Wq1k1k/yLF1uN1uBXteaXIbD1bwT5WcQk2RGwy7GbWweEi13VHVoKRhW16AsHcayCu5vynlV8hY7VrVmA37n+OBN8iFBxLo5DUQevdJ1f9dX/MYUsCjhdIxSt1Kqvv+4Y56uwGYE1SthUiqwVW32bPuRya7zNi/JfnMJHobj8fDRAWO35w4eBo77fwCe1aABfAP4fwJ4prVjAK9pV23zkGj3AV7DsmE2hD+F8G1hQpYkOQPEM6EouF0qpcMQ/81xh+7XQf/yrJkuJv3xmK42TP9ATBe1dgzTVVM39EOi3cd01ZQVvWH6KUw3zulXewfnXCDsbbBvtXwec/ZI7+DRy6QbpDdIfyek72jtGKS3NWwo2iHV7mN6WzVk02igfgrUzfP7oa5qiqLxv3QYaiLVwZee0/8+GrruwAHOo3vmj9uFKjRPYxrMv+vTGEFrR2Fe1XR8SLT7KH/VkTsHGf8bRMEjvCMcAAA=`
@@ -21,13 +23,13 @@ var testData string
 func getTestData() {
 	b64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(testDataPacked))
 	gz, _ := gzip.NewReader(b64Dec)
-	buf := getBuffer()
+	buf := bufs.GetBuffer()
 	n, _ := buf.ReadFrom(gz)
 	if n == 0 {
 		panic(errors.New("test data is empty"))
 	}
 	testData = buf.String()
-	putBuffer(buf)
+	bufs.PutBuffer(buf)
 }
 
 func init() {

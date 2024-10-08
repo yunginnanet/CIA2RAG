@@ -99,6 +99,12 @@ func (c *Config) UploadLink(s string) (*Document, error) {
 		return &up.Documents[0], ErrAccessDenied
 	}
 
+	if strings.Contains(up.Documents[0].PageContent, ".pdf") || strings.Contains(up.Documents[0].PageContent, ".PDF") {
+		if err := c.GetPDFLinks(s); err != nil {
+			log.Printf(err.Error())
+		}
+	}
+
 	return &up.Documents[0], nil
 }
 

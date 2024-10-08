@@ -1,7 +1,6 @@
 package cia
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ciascrape/pkg/bufs"
 	"ciascrape/pkg/mu"
 )
 
@@ -24,7 +24,9 @@ func EndpointCollection() string {
 	return EndpointBase + "readingroom/collection/"
 }
 
-const pageRegexPattern = `field-content"><a href="\/readingroom\/document\/(.*)">`
+const (
+	pageRegexPattern = `field-content"><a href="\/readingroom\/document\/(.*)">`
+)
 
 var (
 	ErrBadStatusCode      = errors.New("bad status code")
@@ -35,22 +37,6 @@ var (
 
 	pageRegex = regexp.MustCompile(pageRegexPattern)
 )
-
-var buffers = &sync.Pool{
-	New: func() interface{} {
-		return bytes.NewBuffer(nil)
-	},
-}
-
-func getBuffer() *bytes.Buffer {
-	buf := buffers.Get().(*bytes.Buffer)
-	buf.Reset()
-	return buf
-}
-
-func putBuffer(buf *bytes.Buffer) {
-	buffers.Put(buf)
-}
 
 // Collection collects the pages of a reading room collection and provides a channel for each page.
 // The nature of this struct means that once the channels are drained, they are gone.
@@ -253,8 +239,8 @@ func ParsePage(res *http.Response) ([]string, error) {
 		return nil, fmt.Errorf("%w: %d", ErrBadStatusCode, res.StatusCode)
 	}
 
-	buf := getBuffer()
-	defer putBuffer(buf)
+	buf := bufs.GetBuffer()
+	defer bufs.PutBuffer(buf)
 
 	n, err := buf.ReadFrom(res.Body)
 	if err != nil {
