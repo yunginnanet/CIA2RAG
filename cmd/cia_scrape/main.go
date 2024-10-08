@@ -10,6 +10,7 @@ import (
 
 	"ciascrape/pkg/anythingllm"
 	"ciascrape/pkg/cia"
+	"ciascrape/pkg/mu"
 )
 
 func run(cfg *Config) error {
@@ -20,6 +21,8 @@ func run(cfg *Config) error {
 			log.Printf("[err] failed to get pages: %v", err)
 		}
 	}()
+
+	_ = mu.NewSharedMutex("net").WithSIGHUPUnlock()
 
 	pages := ciaCol.Drain(context.Background())
 
