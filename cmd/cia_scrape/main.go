@@ -43,14 +43,18 @@ func run(cfg *Config) error {
 
 	count := 0
 	retries := 0
+	dupes := 0
 
 	for page := range pages {
-		log.Printf("uploading page: %s", page)
 		doc, err := cfg.AnythingLLM.UploadLink(page)
 		if errors.Is(err, anythingllm.ErrDuplicate) {
-			log.Printf("duplicate link: %s", page)
+			dupes++
+			// log.Printf("duplicate link: %s", page)
 			continue
 		}
+
+		log.Printf("uploading page (dupes skipped: %d): %s", dupes, page)
+
 		if err != nil {
 			if errors.Is(err, anythingllm.ErrAccessDenied) {
 				retries++

@@ -82,9 +82,10 @@ func (c *Config) AddDocumentItem(doc *Item) error {
 	return c.AddDocument(doc2)
 }
 
+// FIXME: make not global
 var (
 	docQueue       = make(chan *Document, 1000)
-	docQueueTicker = time.NewTicker(10 * time.Second)
+	docQueueTicker = time.NewTicker(30 * time.Second)
 	docQueueChan   = make(chan bool)
 )
 
