@@ -3,6 +3,7 @@ package anythingllm
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -18,7 +19,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"ciascrape/pkg/bufs"
-	seekable_buffer "ciascrape/pkg/bufs/3rd_party"
+	seekablebuffer "ciascrape/pkg/bufs/3rd_party"
 	"ciascrape/pkg/mu"
 )
 
@@ -38,6 +39,23 @@ func init() {
 	PDFConfig.DecodeAllStreams = true
 }
 
+func sliceEmpty(s []string) bool {
+	return s == nil || len(s) == 0
+}
+
+func getPDFData(url string) []byte {
+	var (
+		err error
+		dat []byte
+	)
+	url, dat, err = seekPDF(url)
+	if err != nil {
+		log.Printf("error getting PDF data for '%s': %v", url, err)
+		return nil
+	}
+	return dat
+}
+
 func (c *Config) GetPDFLinks(url string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*480)
 	defer cancel()
@@ -48,6 +66,34 @@ func (c *Config) GetPDFLinks(url string) error {
 	defer pdfGoRoutines.Release(1)
 
 	log.Printf("getting PDFs from page %s", url)
+
+	handleFailedPDF := func(pdfUrl, pdfName string, buf *bytes.Buffer) (resData []byte) {
+		var err error
+		log.Printf("error uploading PDF link '%s': %v\nretrying as upload...", pdfUrl, err)
+		dat := getPDFData(pdfUrl)
+		docDat := c.altUploadPDF(pdfUrl, pdfName, buf, dat)
+		if docDat != nil && len(docDat) > 0 {
+			log.Printf("retrying as upload successful: \n%s", spew.Sdump(docDat))
+			return
+		}
+		log.Printf("retrying by extracting keywords: '%s'", pdfUrl)
+		keyWords := extractKeyWords(dat)
+		if sliceEmpty(keyWords) {
+			log.Printf("error extracting keywords from PDF '%s': got nil result", pdfUrl)
+			return
+		}
+		if keyWords != nil && len(keyWords) > 0 {
+			keyw := strings.Join(keyWords, " ")
+			hr := strings.Repeat("-", 15)
+			log.Printf("got keywords for '%s': \n%s\n%s\n%s\nuploading...", pdfUrl, hr, keyw, hr)
+
+			if resData, err = c.UploadRaw(pdfUrl, keyw); err != nil {
+				log.Printf("error uploading extracted PDF data '%s': %v", pdfUrl, err)
+				return
+			}
+		}
+		return
+	}
 
 	go func() {
 		mu.GetMutex("net").RLock()
@@ -79,79 +125,6 @@ func (c *Config) GetPDFLinks(url string) error {
 			return
 		}
 
-		extractKeyWords := func(data []byte) []string {
-			sb := &seekable_buffer.Buffer{}
-			_, _ = sb.Write(data)
-			keyWords, err := api.Keywords(sb, PDFConfig)
-			if err != nil {
-				log.Printf("error extracting keywords from PDFs: %v", err)
-			}
-			if len(keyWords) == 0 {
-				log.Printf("no keywords extracted from PDFs")
-			}
-			return keyWords
-		}
-
-		getPDFData := func(url string) []byte {
-			var (
-				err error
-				dat []byte
-			)
-			url, dat, err = seekPDF(url)
-			if err != nil {
-				log.Printf("error getting PDF data for '%s': %v", url, err)
-				return nil
-			}
-			return dat
-		}
-
-		altUploadPDF := func(url string, pdfName string, dats ...[]byte) []byte {
-
-			var dat []byte
-			if len(dats) == 1 {
-				dat = dats[0]
-			} else {
-				dat = getPDFData(url)
-			}
-
-			if dat == nil || len(dat) == 0 {
-				return nil
-			}
-
-			var res *http.Response
-
-			res, err = c.upload("v1/document/upload", pdfName, bytes.NewReader(dat))
-
-			if err != nil || res == nil {
-				if err == nil {
-					err = errors.New("upload failed")
-				}
-				log.Printf("error uploading %d bytes of PDF data: %v", len(dat), err)
-				if res != nil {
-					_ = res.Body.Close()
-					return nil
-				}
-			}
-			var resDat []byte
-			buf.Reset()
-			if res != nil && res.Body != nil {
-				n, err := buf.ReadFrom(res.Body)
-				if err != nil {
-					log.Printf("http response body read error for PDFs: %v", err)
-					_ = res.Body.Close()
-					return nil
-				}
-				_ = res.Body.Close()
-				resDat = buf.Bytes()[:n]
-			}
-			if len(resDat) == 0 {
-				log.Printf("http response body for PDFs is empty")
-				return nil
-			}
-
-			return resDat
-		}
-
 		for _, match := range matches {
 			if len(match) < 2 {
 				continue
@@ -170,27 +143,10 @@ func (c *Config) GetPDFLinks(url string) error {
 
 			doc, err := c.UploadLink(pdfUrl)
 			if err != nil {
-				log.Printf("error uploading PDF link '%s': %v\nretrying as upload...", pdfUrl, err)
-				dat := getPDFData(pdfUrl)
-				docDat := altUploadPDF(pdfUrl, string(match[1]), dat)
-				if docDat != nil && len(docDat) > 0 {
-					log.Printf("retrying as upload successful: \n%s", spew.Sdump(docDat))
-					continue
-				}
-				log.Printf("retrying by extracting keywords: '%s'", pdfUrl)
-				keyWords := extractKeyWords(dat)
-				if keyWords == nil || len(keyWords) == 0 {
-					log.Printf("error extracting keywords from PDF '%s': got nil result", pdfUrl)
-				}
-				if keyWords != nil && len(keyWords) > 0 {
-					keyw := strings.Join(keyWords, " ")
-					hr := strings.Repeat("-", 15)
-					log.Printf("got keywords for '%s': \n%s\n%s\n%s\nuploading...", pdfUrl, hr, keyw, hr)
-
-					if resData, err = c.UploadRaw(pdfUrl, keyw); err != nil {
-						log.Printf("error uploading extracted PDF data '%s': %v", pdfUrl, err)
-						continue
-					}
+				resData = handleFailedPDF(pdfUrl, string(match[0]), buf)
+				rtr := &RawTextResp{}
+				if err := json.Unmarshal(resData, rtr); err == nil && len(rtr.Documents[0].PageContent) > 0 {
+					doc = &rtr.Documents[0]
 				}
 			}
 			if doc != nil {
@@ -205,6 +161,79 @@ func (c *Config) GetPDFLinks(url string) error {
 	}()
 
 	return nil
+}
+
+func (c *Config) altUploadPDF(url string, pdfName string, buf *bytes.Buffer, dats ...[]byte) []byte {
+	var err error
+
+	var dat []byte
+	if len(dats) == 1 {
+		dat = dats[0]
+	} else {
+		dat = getPDFData(url)
+	}
+
+	if dat == nil || len(dat) == 0 {
+		return nil
+	}
+
+	var res *http.Response
+
+	res, err = c.upload("v1/document/upload", pdfName, bytes.NewReader(dat))
+
+	if err != nil || res == nil {
+		if err == nil {
+			err = errors.New("upload failed")
+		}
+		log.Printf("error uploading %d bytes of PDF data: %v", len(dat), err)
+		if res != nil {
+			_ = res.Body.Close()
+			return nil
+		}
+	}
+	var resDat []byte
+	buf.Reset()
+	if res != nil && res.Body != nil {
+		n, err := buf.ReadFrom(res.Body)
+		if err != nil {
+			log.Printf("http response body read error for PDFs: %v", err)
+			_ = res.Body.Close()
+			return nil
+		}
+		_ = res.Body.Close()
+		resDat = buf.Bytes()[:n]
+	}
+	if len(resDat) == 0 {
+		log.Printf("http response body for PDFs is empty")
+		return nil
+	}
+
+	return resDat
+}
+
+func extractKeyWords(data []byte) []string {
+	sb := &seekablebuffer.Buffer{}
+	var n int
+	var err error
+	n, err = sb.Write(data)
+	if err != nil {
+		log.Printf("failed to write PDF byte data to buffer: %v", err)
+		return []string{}
+	}
+	if n == 0 {
+		log.Printf("0 byte write result when writing PDF data written to buffer")
+		return []string{}
+	}
+	keyWords, err := api.Keywords(sb, PDFConfig)
+	if err != nil {
+		log.Printf("error extracting keywords from PDFs: %v", err)
+		return []string{}
+	}
+	if len(keyWords) == 0 {
+		log.Printf("no keywords extracted from PDFs")
+		return []string{}
+	}
+	return keyWords
 }
 
 func seekPDF(url string) (string, []byte, error) {
@@ -277,6 +306,7 @@ func cleanPDFURL(url string) string {
 	url = url + file
 	url = strings.ReplaceAll(url, "//", "/")
 	url = strings.ReplaceAll(url, "https:/", "https://")
+	//goland:noinspection HttpUrlsUsage
 	url = strings.ReplaceAll(url, "http:/", "http://")
 
 	pdfUrl := strings.Replace(url, "readingroom/document", "readingroom/docs", 1)

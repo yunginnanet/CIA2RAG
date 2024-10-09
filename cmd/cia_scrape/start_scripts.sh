@@ -23,7 +23,7 @@ echo -e "\n${_hr}"
 
 if ! ls mullvad_relays >/dev/null; then
 	echo "creating mullvad_relays fifo"
-	/ mkfifo mullvad_relays || exit 1
+	mkfifo mullvad_relays || exit 1
 fi
 
 if ! ls mullvad_trigger >/dev/null; then

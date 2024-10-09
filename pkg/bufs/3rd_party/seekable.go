@@ -59,6 +59,10 @@ func (x *Buffer) Bytes() []byte  { return x.b.Bytes()[:x.n] }
 func (x *Buffer) Len() int { return x.n }
 
 func (x *Buffer) Read(p []byte) (int, error) {
+	start := x.p
+	if start < 0 {
+		start = 0
+	}
 	return copy(p, x.Bytes()[x.p:]), nil
 }
 
