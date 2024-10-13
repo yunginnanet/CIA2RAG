@@ -2,7 +2,6 @@ package mu
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -10,6 +9,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"git.tcp.direct/kayos/logger"
 )
 
 var (
@@ -57,12 +58,16 @@ func NewSharedMutex(name string) *SharedMutex {
 }
 
 func (sm *SharedMutex) WithSIGHUPUnlock() *SharedMutex {
+	log := logger.Global().C()
+
 	sm.mu.Lock()
 	sm.sigMu.Lock()
 	signal.Notify(sm.sig, syscall.SIGHUP)
 	sm.sigMu.Unlock()
 	sm.mu.Unlock()
+
 	log.Printf("[mutex] SIGHUP signal unlock enabled for '%s'", sm.name)
+
 	return sm
 }
 
@@ -74,6 +79,8 @@ func (sm *SharedMutex) WithDelayedUnlock(delay time.Duration) *SharedMutex {
 }
 
 func (sm *SharedMutex) watchSIGHUP() {
+	log := logger.Global().C()
+
 	if sm.sig == nil {
 		return
 	}
@@ -97,12 +104,16 @@ func (sm *SharedMutex) watchSIGHUP() {
 }
 
 func (sm *SharedMutex) Lock() {
+	log := logger.Global().C()
+
 	sm.mu.Lock()
 	log.Printf("[mutex] '%s' locked", sm.name)
 	go sm.watchSIGHUP()
 }
 
 func (sm *SharedMutex) Unlock(ctx ...context.Context) {
+	log := logger.Global().C()
+
 	if sm.delay > 0 {
 		time.Sleep(sm.delay)
 	}
@@ -131,6 +142,8 @@ func (sm *SharedMutex) Unlock(ctx ...context.Context) {
 }
 
 func (sm *SharedMutex) unlock(details ...string) {
+	log := logger.Global().C()
+
 	if sm.mu.TryRLock() {
 		sm.mu.RUnlock()
 		return

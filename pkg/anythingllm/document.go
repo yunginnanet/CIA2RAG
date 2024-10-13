@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
+	"git.tcp.direct/kayos/logger"
 	spew2 "github.com/davecgh/go-spew/spew"
 
 	"ciascrape/pkg/bufs"
@@ -119,6 +119,8 @@ func processRawTextResp(dat []byte) []byte {
 }
 
 func (c *Config) UploadRaw(url, s string) ([]byte, error) {
+	log := logger.Global().C()
+
 	// v1/document/raw-text
 	if c.hasSeenURL(url) {
 		return nil, ErrDuplicate
@@ -170,6 +172,7 @@ func (c *Config) UploadRaw(url, s string) ([]byte, error) {
 }
 
 func (c *Config) UploadLink(s string) (*Document, error) {
+	log := logger.Global().C()
 
 	if c.hasSeenURL(s) {
 		return nil, ErrDuplicate
@@ -246,6 +249,8 @@ type DocumentsFolder map[string][]Item
 type Seen map[string]bool
 
 func DocsToFolders(resp *DocumentsResponse) DocumentsFolder {
+	log := logger.Global().C()
+
 	folders := make(DocumentsFolder)
 	count := 0
 	for _, item := range resp.LocalFiles.Items {
@@ -277,6 +282,8 @@ func DocsToFolders(resp *DocumentsResponse) DocumentsFolder {
 }
 
 func (c *Config) GetDocuments() (DocumentsFolder, error) {
+	log := logger.Global().C()
+
 	log.Println("getting documents")
 	res, err := c.get("v1/documents")
 	if err != nil {

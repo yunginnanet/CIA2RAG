@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	"git.tcp.direct/kayos/logger"
 	spew2 "github.com/davecgh/go-spew/spew"
 	"github.com/l0nax/go-spew/spew"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -44,6 +44,8 @@ func sliceEmpty(s []string) bool {
 }
 
 func getPDFData(url string) []byte {
+	log := logger.Global().C()
+
 	var (
 		err error
 		dat []byte
@@ -57,6 +59,8 @@ func getPDFData(url string) []byte {
 }
 
 func (c *Config) GetPDFLinks(url string) error {
+	log := logger.Global().C()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*480)
 	defer cancel()
 	if err := pdfGoRoutines.Acquire(ctx, 1); err != nil {
@@ -164,6 +168,8 @@ func (c *Config) GetPDFLinks(url string) error {
 }
 
 func (c *Config) altUploadPDF(url string, pdfName string, buf *bytes.Buffer, dats ...[]byte) []byte {
+	log := logger.Global().C()
+
 	var err error
 
 	var dat []byte
@@ -212,6 +218,8 @@ func (c *Config) altUploadPDF(url string, pdfName string, buf *bytes.Buffer, dat
 }
 
 func extractKeyWords(data []byte) []string {
+	log := logger.Global().C()
+
 	sb := &seekablebuffer.Buffer{}
 	var n int
 	var err error
@@ -237,6 +245,8 @@ func extractKeyWords(data []byte) []string {
 }
 
 func seekPDF(url string) (string, []byte, error) {
+	log := logger.Global().C()
+
 	buf := bufs.GetBuffer()
 	defer bufs.PutBuffer(buf)
 

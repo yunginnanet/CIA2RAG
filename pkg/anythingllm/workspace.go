@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
+
+	"git.tcp.direct/kayos/logger"
 )
 
 type Workspace struct {
@@ -90,6 +91,8 @@ var (
 )
 
 func (c *Config) docQueueFlush() {
+	log := logger.Global().C()
+
 	go func() {
 		for {
 			select {

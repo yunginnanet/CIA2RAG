@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"strings"
 	"sync"
 
 	http2 "ciascrape/pkg/http"
+
+	"git.tcp.direct/kayos/logger"
 
 	"ciascrape/pkg/bufs"
 	"ciascrape/pkg/mu"
@@ -91,6 +92,8 @@ func (c *Config) markSeenURL(s string) {
 }
 
 func (c *Config) updateSeen() error {
+	log := logger.Global().C()
+
 	docsFolder, err := c.GetDocuments()
 	if err != nil {
 		return err

@@ -3,11 +3,12 @@ package anythingllm
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"sync/atomic"
 	"syscall"
+
+	"git.tcp.direct/kayos/logger"
 
 	"ciascrape/pkg/mu"
 )
@@ -20,6 +21,8 @@ func init() {
 }
 
 func WriteToFIFO(path string) error {
+	log := logger.Global().C()
+
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("empty path")
 	}

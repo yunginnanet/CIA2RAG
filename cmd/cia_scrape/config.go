@@ -4,7 +4,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+
+	"git.tcp.direct/kayos/logger"
 
 	"ciascrape/pkg/anythingllm"
 	"ciascrape/pkg/cia"
@@ -58,6 +59,8 @@ func (c *Config) WithAnythingLLM(config *anythingllm.Config) *Config {
 }
 
 func ConfigFromFlags() *Config {
+	log := logger.Global().C()
+
 	maxPages := flag.Int("pages", defaultMaxPages, "Maximum number of pages to scrape")
 	startPage := flag.Int("start-page", 1, "Page to start scraping from")
 	collection := flag.String("collection", "", "Collection to scrape")

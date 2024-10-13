@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"git.tcp.direct/kayos/logger"
 	"golang.org/x/sync/semaphore"
 
 	"ciascrape/pkg/bufs"
+	"ciascrape/pkg/errs"
 	"ciascrape/pkg/mu"
 )
 
@@ -83,6 +84,8 @@ func (c *Collection) WithStartPage(startPage int) *Collection {
 var pagesGoRoutines = semaphore.NewWeighted(500)
 
 func (c *Collection) GetPages() error {
+	log := logger.Global().C()
+
 	wg := &sync.WaitGroup{}
 
 	if c.maxDocuments < 20 {
@@ -144,7 +147,7 @@ func (c *Collection) GetPages() error {
 			return nil
 		default:
 			c.done.Store(true)
-			return fmt.Errorf("%w: %d", ErrBadStatusCode, res.StatusCode)
+			return errs.BadStatusCodeError{StatusCode: res.StatusCode}
 		}
 	}
 
@@ -154,6 +157,8 @@ func (c *Collection) GetPages() error {
 }
 
 func (c *Collection) Drain(ctx context.Context) (chan string, chan bool) {
+	log := logger.Global().C()
+
 	var documents = make(chan string, c.maxDocuments)
 
 	var (
@@ -274,6 +279,8 @@ func ParsePage(res *http.Response) ([]string, error) {
 }
 
 func (c *Collection) GetPage(i int, channel chan string, wg *sync.WaitGroup) error {
+	log := logger.Global().C()
+
 	defer wg.Done()
 
 	sleepFactor := i - c.startPage
